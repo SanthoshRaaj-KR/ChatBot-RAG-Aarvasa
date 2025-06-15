@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+sqlalchemy
+httpx
+motor
+requests
+pandas
+sentence-transformers 
+faiss-cpu
