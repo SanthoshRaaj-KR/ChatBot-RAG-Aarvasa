@@ -1,37 +1,26 @@
-# app/chatbot.py
+import openai
+import os
+from dotenv import load_dotenv
 
-from app.rag_engine import RAGEngine
-import requests
+load_dotenv()
 
-rag = RAGEngine()
-rag.load_knowledge()
-rag.build_index()
+openai.api_key = os.getenv("GROQ_API_KEY")
+openai.api_base = "https://api.groq.com/openai/v1"
 
-def build_prompt(user_query: str):
-    relevant_context = rag.retrieve_context(user_query)
+# Load system prompt from file
+with open("app/company_context.txt", "r", encoding="utf-8") as f:
+    system_prompt = f.read()
 
-    return f"""
-You are a helpful real estate assistant working for Aarvasa.
-
-Use the context below to answer the user's question:
-------------------
-{relevant_context}
-------------------
-
-User: {user_query}
-Answer in a friendly and helpful tone.
-"""
-
-def ask_ollama(prompt: str):
-    url = "http://localhost:11434/api/generate"
-
-    payload = {
-        "model": "mistral",
-        "prompt": prompt,
-        "stream": False
-    }
-
-    res = requests.post(url, json=payload)
-    if res.ok:
-        return res.json().get("response", "").strip()
-    return "Sorry, I couldn't generate a response right now."
+def get_chat_response(user_message: str) -> str:
+    try:
+        response = openai.ChatCompletion.create(
+            model="llama3-8b-8192",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.5,
+        )
+        return response.choices[0].message["content"].strip()
+    except Exception as e:
+        return f"Error from AI: {str(e)}"
