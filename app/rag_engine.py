@@ -1,37 +1,16 @@
-# app/rag_engine.py
-
-import pandas as pd
-from sentence_transformers import SentenceTransformer
-import faiss
+from sentence_transformers import SentenceTransformer, util
 import numpy as np
 
 class RAGEngine:
-    def __init__(self):
+    def __init__(self, context_path: str):
+        with open(context_path, "r", encoding="utf-8") as f:
+            self.chunks = f.read().split("\n\n")  # Split context
         self.embedder = SentenceTransformer("all-MiniLM-L6-v2")
-        self.documents = []
-        self.index = None
+        self.chunk_embeddings = self.embedder.encode(self.chunks, convert_to_tensor=True)
 
-    def load_knowledge(self):
-        # Load and chunk company info
-        with open("app/company_context.txt", "r") as f:
-            company_text = f.read()
-            self.documents.append(("company", company_text))
-
-        # Load property listings
-        df = pd.read_csv("app/listings.csv")
-        for _, row in df.iterrows():
-            text = f"{row['title']} - {row['bedrooms']}BHK {row['type']} in {row['location']} for ₹{row['price']}L"
-            self.documents.append(("listing", text))
-
-    def build_index(self):
-        embeddings = [self.embedder.encode(doc[1]) for doc in self.documents]
-        self.index = faiss.IndexFlatL2(len(embeddings[0]))
-        self.index.add(np.array(embeddings))
-        self.embeddings = embeddings
-
-    def retrieve_context(self, query, top_k=4):
-        query_vec = self.embedder.encode(query).reshape(1, -1)
-        distances, indices = self.index.search(query_vec, top_k)
-
-        results = [self.documents[i][1] for i in indices[0]]
-        return "\n".join(results)
+    def retrieve_relevant_chunks(self, query: str, top_k: int = 3) -> str:
+        query_embedding = self.embedder.encode(query, convert_to_tensor=True)
+        similarities = util.pytorch_cos_sim(query_embedding, self.chunk_embeddings)[0]
+        top_indices = np.argsort(-similarities.cpu().numpy())[:top_k]
+        top_chunks = "\n\n".join([self.chunks[i] for i in top_indices])
+        return top_chunks
