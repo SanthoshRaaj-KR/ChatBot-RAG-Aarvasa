@@ -30,40 +30,38 @@ nav_rag = NavigationRAG("app/navigation.json")
 
 def get_chat_response(user_message: str, chat_history=None) -> str:
     try:
-        user_msg_lower = user_message.lower()
+        # Step 1: Try Navigation
+        nav_results = nav_rag.retrieve_navigation_info(user_message, top_k=1)
+        nav_match = nav_results[0] if nav_results else None
 
-        # Short-circuit common small talk or general queries
-        general_keywords = ["hello", "hi", "hey", "how are you", "what's up", "thank you", "thanks"]
-        if any(word in user_msg_lower for word in general_keywords):
-            return "Hey! I'm Aarvasa's assistant. Let me know how I can help with your property queries. 😊"
+        # Step 2: Try Company Context RAG
+        company_context = company_rag.retrieve_relevant_chunks(user_message)
 
-        # If it's about 'where', 'find', 'navigate', etc., then use navigation.json
-        if any(kw in user_msg_lower for kw in ["where", "find", "go to", "navigate", "open", "page", "how to"]):
-            nav_results = nav_rag.retrieve_navigation_info(user_message, top_k=1)
-            nav_match = nav_results[0] if nav_results else None
-            if nav_match:
-                return f"{nav_match['description']} You can find it on the '{nav_match['name']}' page."
+        # If no nav match but company context found → go with company RAG
+        if company_context.strip():
+            messages = [{"role": "system", "content": f"{system_instructions}\n\n{company_context}"}]
 
-        # Otherwise, try to use company RAG
-        relevant_context = company_rag.retrieve_relevant_chunks(user_message)
+            if chat_history and isinstance(chat_history, list):
+                trimmed = chat_history[-MAX_CONTEXT_MESSAGES:]
+                for user_msg, bot_msg in trimmed:
+                    messages.append({"role": "user", "content": user_msg})
+                    messages.append({"role": "assistant", "content": bot_msg})
 
-        messages = [{"role": "system", "content": f"{system_instructions}\n\n{relevant_context}"}]
+            messages.append({"role": "user", "content": user_message})
 
-        if chat_history and isinstance(chat_history, list):
-            trimmed = chat_history[-MAX_CONTEXT_MESSAGES:]
-            for user_msg, bot_msg in trimmed:
-                messages.append({"role": "user", "content": user_msg})
-                messages.append({"role": "assistant", "content": bot_msg})
+            response = openai.ChatCompletion.create(
+                model=MODEL,
+                messages=messages,
+                temperature=0.5,
+            )
+            return response.choices[0].message["content"].strip()
 
-        messages.append({"role": "user", "content": user_message})
+        # If nav match found but no company context
+        if nav_match:
+            return f"{nav_match['description']} You can find it on the '{nav_match['name']}' page."
 
-        response = openai.ChatCompletion.create(
-            model=MODEL,
-            messages=messages,
-            temperature=0.5,
-        )
-
-        return response.choices[0].message["content"].strip()
+        # Final fallback — no RAG or nav matched
+        return "Hey! I'm Aarvasa's assistant. Let me know how I can help with your property queries. 😊"
 
     except Exception as e:
         return f"Error from AI: {str(e)}"
