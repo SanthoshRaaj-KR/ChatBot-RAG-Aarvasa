@@ -54,7 +54,10 @@ def get_chat_response(user_message: str, chat_history=None) -> str:
                 messages=messages,
                 temperature=0.5,
             )
-            return response.choices[0].message["content"].strip()
+            raw_response = response.choices[0].message["content"].strip()
+            if raw_response.lower().startswith("response"):
+                raw_response = raw_response[7:].strip()
+            return raw_response
 
         # If nav match found but no company context
         if nav_match:
