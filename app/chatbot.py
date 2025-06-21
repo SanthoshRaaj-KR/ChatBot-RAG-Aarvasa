@@ -58,7 +58,7 @@ def get_chat_response(user_message: str, chat_history=None) -> str:
 
         # If nav match found but no company context
         if nav_match:
-            return f"{nav_match['description']} You can find it on the '{nav_match['name']}' page."
+            return f"{nav_match['description']} 👉 [Go to {nav_match['name']} Page]({nav_match['path']})"
 
         # Final fallback — no RAG or nav matched
         return "Hey! I'm Aarvasa's assistant. Let me know how I can help with your property queries. 😊"
